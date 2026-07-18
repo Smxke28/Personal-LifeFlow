@@ -37,3 +37,17 @@ Embora seja um app puramente client-side, aplicamos várias práticas de seguran
 2. Instale as dependências:
    ```bash
    npm install
+   ```
+3. Inicie o servidor de desenvolvimento:
+   ```bash
+   npm run dev
+   ```
+4. O app estará rodando em `http://localhost:3000`.
+
+## 🚀 Deploy (Vercel)
+
+O projeto está otimizado para deploy na Vercel. O script de build é configurado com:
+```bash
+npm run build
+```
+Basta importar o repositório na Vercel e o app será publicado, herdando automaticamente as configurações e as regras de segurança do `vercel.json`.

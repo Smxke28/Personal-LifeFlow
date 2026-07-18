@@ -1,0 +1,6 @@
+{
+  "name": "Personal OS Showcase",
+  "description": "An interactive, professional multi-device UI/UX design mockup presentation showcasing the cohesive Personal OS application with desktop and mobile layouts side-by-side.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
