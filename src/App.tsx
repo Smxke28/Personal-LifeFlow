@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { ReadingTab } from './components/ReadingTab';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ChevronLeft,
@@ -29,8 +30,8 @@ import {
   Lock,
   Delete
 } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { Transaction, CalendarBlock, CategoryData, Exercise, WorkoutSession, WorkoutSet, RecurringItem } from './types';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts';
+import { Book, ReadingLog, Transaction, CalendarBlock, CategoryData, Exercise, WorkoutSession, WorkoutSet, RecurringItem } from './types';
 
 // Default initial data
 const defaultExercises: Exercise[] = [
@@ -92,7 +93,7 @@ export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState("");
 
-  const [currentTab, setCurrentTab] = useState<'home' | 'finances' | 'calendar' | 'settings' | 'workouts'>('home');
+  const [currentTab, setCurrentTab] = useState<'home' | 'finances' | 'calendar' | 'workouts' | 'reading' | 'settings'>('home');
 
   // States
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -101,6 +102,10 @@ export default function App() {
   const [customCategories, setCustomCategories] = useState<any[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [workoutSessions, setWorkoutSessions] = useState<WorkoutSession[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [readingLogs, setReadingLogs] = useState<ReadingLog[]>([]);
+  const [dailyGoal, setDailyGoal] = useState<number>(20);
+
   const [themeColor, setThemeColor] = useState<string>('cyan');
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -161,6 +166,15 @@ export default function App() {
     if (savedWorkouts) {
       setWorkoutSessions(savedWorkouts.map((s: any) => ({ ...s, date: new Date(s.date || Date.now()) })));
     }
+    
+    const savedBooks = safeParseArray(localStorage.getItem('pos-books'), (i) => i && typeof i === 'object' && i.id);
+    if (savedBooks) setBooks(savedBooks);
+
+    const savedLogs = safeParseArray(localStorage.getItem('pos-readingLogs'), (i) => i && typeof i === 'object' && i.id);
+    if (savedLogs) setReadingLogs(savedLogs);
+
+    const savedGoal = localStorage.getItem('pos-dailyGoal');
+    if (savedGoal) setDailyGoal(Number(savedGoal));
 
     setIsLoaded(true);
   }, []);
@@ -174,8 +188,11 @@ export default function App() {
     localStorage.setItem('pos-categories', JSON.stringify(customCategories));
     localStorage.setItem('pos-exercises', JSON.stringify(exercises));
     localStorage.setItem('pos-workouts', JSON.stringify(workoutSessions));
+    localStorage.setItem('pos-books', JSON.stringify(books));
+    localStorage.setItem('pos-readingLogs', JSON.stringify(readingLogs));
+    localStorage.setItem('pos-dailyGoal', String(dailyGoal));
     localStorage.setItem('pos-theme', themeColor);
-  }, [transactions, calendarBlocks, customCategories, exercises, workoutSessions, themeColor, recurringItems, isLoaded]);
+  }, [transactions, calendarBlocks, customCategories, exercises, workoutSessions, themeColor, recurringItems, isLoaded, books, readingLogs, dailyGoal]);
 
   const [periodFilter, setPeriodFilter] = useState<'current' | 'previous' | 'all'>('current');
 
@@ -516,7 +533,16 @@ export default function App() {
                   onAddExercise={handleAddExercise}
                 />
               )}
-              {currentTab === 'settings' && (
+              
+      {currentTab === 'reading' && (
+        <ReadingTab 
+          books={books} setBooks={setBooks} 
+          readingLogs={readingLogs} setReadingLogs={setReadingLogs}
+          dailyGoal={dailyGoal} setDailyGoal={setDailyGoal}
+          themeColor={themeColor}
+        />
+      )}
+{currentTab === 'settings' && (
                 <SettingsTab 
                   appPin={appPin}
                   setAppPin={setAppPin}
@@ -540,6 +566,7 @@ export default function App() {
           <NavButton icon={<DollarSign className="w-5 h-5" />} label="Finanças" isActive={currentTab === 'finances'} onClick={() => setCurrentTab('finances')} />
           <NavButton icon={<CalendarIcon className="w-5 h-5" />} label="Agenda" isActive={currentTab === 'calendar'} onClick={() => setCurrentTab('calendar')} />
           <NavButton icon={<Dumbbell className="w-5 h-5" />} label="Treinos" isActive={currentTab === 'workouts'} onClick={() => setCurrentTab('workouts')} />
+          <NavButton icon={<BookOpen className="w-5 h-5" />} label="Leitura" isActive={currentTab === 'reading'} onClick={() => setCurrentTab('reading')} />
           <NavButton icon={<Settings className="w-5 h-5" />} label="Ajustes" isActive={currentTab === 'settings'} onClick={() => setCurrentTab('settings')} />
         </div>
       </nav>
@@ -599,8 +626,180 @@ function HomeTab({ totalExpenses, totalIncome, balance, focusHours, streak, tran
   );
 }
 
+
+function FinancesHistoryTab({ transactions, renderIcon }: { transactions: any[], renderIcon: any }) {
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+
+  const historyData = useMemo(() => {
+    const grouped = transactions.reduce((acc: any, t: any) => {
+      const d = new Date(t.timestamp);
+      // Format: YYYY-MM
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!acc[key]) acc[key] = { monthId: key, label: `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`, total: 0 };
+      acc[key].total += t.amount;
+      return acc;
+    }, {});
+    
+    // Sort chronologically
+    return Object.values(grouped).sort((a: any, b: any) => a.monthId.localeCompare(b.monthId));
+  }, [transactions]);
+  
+  // Select the latest month by default if none selected and data exists
+  React.useEffect(() => {
+    if (!selectedMonth && historyData.length > 0) {
+      setSelectedMonth(historyData[historyData.length - 1].monthId);
+    }
+  }, [historyData, selectedMonth]);
+
+  const filteredTransactions = useMemo(() => {
+    if (!selectedMonth) return [];
+    return transactions.filter((t: any) => {
+      const d = new Date(t.timestamp);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return key === selectedMonth;
+    }).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [transactions, selectedMonth]);
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-[#0a0e17] border border-white/10 p-4 rounded-2xl shadow-lg">
+        <h2 className="text-xs font-mono text-accent tracking-widest mb-4">HISTÓRICO MENSAL</h2>
+        {historyData.length > 0 ? (
+          <div className="h-48 w-full overflow-x-auto scrollbar-hide">
+            <div style={{ minWidth: `${Math.max(100, historyData.length * 60)}px`, height: '100%' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={historyData} onClick={(data: any) => {
+                  if (data && data.activePayload && data.activePayload.length > 0) {
+                    setSelectedMonth(data.activePayload[0].payload.monthId);
+                  }
+                }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                  <XAxis dataKey="label" stroke="#ffffff50" fontSize={10} tickLine={false} axisLine={false} />
+                  <RechartsTooltip
+                    cursor={{ fill: '#ffffff05' }}
+                    contentStyle={{ backgroundColor: '#000000e0', border: '1px solid #ffffff20', borderRadius: '8px', fontSize: '12px' }}
+                    itemStyle={{ color: 'var(--color-accent)' }}
+                    formatter={(value: number) => [`${value.toFixed(2)}`, 'Gasto']}
+                  />
+                  <Bar 
+                    dataKey="total" 
+                    fill="var(--color-accent)" 
+                    radius={[4, 4, 0, 0]} 
+                    animationDuration={1500}
+                  >
+                    {historyData.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={entry.monthId === selectedMonth ? '#b026ff' : 'var(--color-accent)'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500 font-mono text-center py-10">Nenhum dado de transação disponível.</p>
+        )}
+      </div>
+      
+      {selectedMonth && filteredTransactions.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-display font-bold text-gray-200 tracking-wider mb-2">TRANSAÇÕES DO MÊS</h2>
+          {filteredTransactions.map((t: any) => (
+            <div key={t.id} className="bg-white/5 border border-white/10 p-3 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-white/5 text-gray-300">
+                  {/* Fallback icon if renderIcon is not perfect */}
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-sm text-white font-medium">{t.description}</p>
+                  <p className="text-[10px] text-gray-400 font-mono capitalize">{t.category} • {new Date(t.timestamp).toLocaleDateString('pt-BR')}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-bold text-white">${t.amount.toFixed(2)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FinancesPatternsTab({ transactions }: { transactions: any[] }) {
+  const patternsData = useMemo(() => {
+    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const sums = [0, 0, 0, 0, 0, 0, 0];
+    const counts = [0, 0, 0, 0, 0, 0, 0];
+
+    transactions.forEach((t: any) => {
+      const d = new Date(t.timestamp);
+      const day = d.getDay();
+      sums[day] += t.amount;
+      counts[day] += 1;
+    });
+
+    const data = days.map((day, idx) => ({
+      day,
+      total: sums[idx],
+      avg: counts[idx] > 0 ? sums[idx] / counts[idx] : 0
+    }));
+
+    return data;
+  }, [transactions]);
+
+  const maxAvgDay = useMemo(() => {
+    let max = 0;
+    let dayStr = '';
+    patternsData.forEach(d => {
+      if (d.avg > max) {
+        max = d.avg;
+        dayStr = d.day;
+      }
+    });
+    // Map to full name
+    const dayNames: any = { 'Dom': 'aos domingos', 'Seg': 'às segundas-feiras', 'Ter': 'às terças-feiras', 'Qua': 'às quartas-feiras', 'Qui': 'às quintas-feiras', 'Sex': 'às sextas-feiras', 'Sáb': 'aos sábados' };
+    return dayStr ? dayNames[dayStr] : null;
+  }, [patternsData]);
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-[#0a0e17] border border-white/10 p-4 rounded-2xl shadow-lg">
+        <h2 className="text-xs font-mono text-accent tracking-widest mb-4">GASTO MÉDIO POR DIA DA SEMANA</h2>
+        
+        {maxAvgDay && (
+          <div className="mb-6 inline-block bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs px-3 py-1.5 rounded-full font-medium">
+            Você gasta mais {maxAvgDay}
+          </div>
+        )}
+
+        <div className="h-48 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={patternsData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+              <XAxis dataKey="day" stroke="#ffffff50" fontSize={10} tickLine={false} axisLine={false} />
+              <RechartsTooltip
+                cursor={{ fill: '#ffffff05' }}
+                contentStyle={{ backgroundColor: '#000000e0', border: '1px solid #ffffff20', borderRadius: '8px', fontSize: '12px' }}
+                itemStyle={{ color: '#b026ff' }}
+                formatter={(value: number) => [`${value.toFixed(2)}`, 'Média de Gasto']}
+              />
+              <Bar 
+                dataKey="avg" 
+                fill="#b026ff" 
+                radius={[4, 4, 0, 0]} 
+                animationDuration={1500}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FinancesTab({ transactions, computedCategories, renderIcon, onAdd, onDelete, onAddCategory, periodFilter, setPeriodFilter, recurringItems, setRecurringItems }: any) {
-  const [financesTab, setFinancesTab] = useState<'transactions' | 'fixed'>('transactions');
+  const [financesTab, setFinancesTab] = useState<'transactions' | 'fixed' | 'history' | 'patterns'>('transactions');
   const [recType, setRecType] = useState<'income' | 'expense'>('income');
   const [recCategory, setRecCategory] = useState('salary'); // Default to salary for income
   const [recDesc, setRecDesc] = useState('');
@@ -693,8 +892,10 @@ function FinancesTab({ transactions, computedCategories, renderIcon, onAdd, onDe
   return (
     <div className="space-y-6">
       <div className="flex bg-[#0a0e17] rounded-lg p-1 border border-white/10">
-        <button onClick={() => setFinancesTab('transactions')} className={`flex-1 text-xs py-2 rounded-md font-bold transition-colors ${financesTab === 'transactions' ? 'bg-accent/20 text-accent' : 'text-gray-400 hover:text-white'}`}>REGISTROS</button>
-        <button onClick={() => setFinancesTab('fixed')} className={`flex-1 text-xs py-2 rounded-md font-bold transition-colors ${financesTab === 'fixed' ? 'bg-accent/20 text-accent' : 'text-gray-400 hover:text-white'}`}>FIXOS</button>
+        <button onClick={() => setFinancesTab('transactions')} className={`flex-1 text-[10px] sm:text-xs py-2 rounded-md font-bold transition-colors ${financesTab === 'transactions' ? 'bg-accent/20 text-accent' : 'text-gray-400 hover:text-white'}`}>TRANSAÇÕES</button>
+        <button onClick={() => setFinancesTab('fixed')} className={`flex-1 text-[10px] sm:text-xs py-2 rounded-md font-bold transition-colors ${financesTab === 'fixed' ? 'bg-accent/20 text-accent' : 'text-gray-400 hover:text-white'}`}>FIXOS</button>
+        <button onClick={() => setFinancesTab('history')} className={`flex-1 text-[10px] sm:text-xs py-2 rounded-md font-bold transition-colors ${financesTab === 'history' ? 'bg-accent/20 text-accent' : 'text-gray-400 hover:text-white'}`}>HISTÓRICO</button>
+        <button onClick={() => setFinancesTab('patterns')} className={`flex-1 text-[10px] sm:text-xs py-2 rounded-md font-bold transition-colors ${financesTab === 'patterns' ? 'bg-accent/20 text-accent' : 'text-gray-400 hover:text-white'}`}>PADRÕES</button>
       </div>
       
       {financesTab === 'transactions' && (
@@ -830,6 +1031,8 @@ function FinancesTab({ transactions, computedCategories, renderIcon, onAdd, onDe
         </div>
       )}
 
+      {financesTab === 'history' && <FinancesHistoryTab transactions={transactions} renderIcon={renderIcon} />}
+      {financesTab === 'patterns' && <FinancesPatternsTab transactions={transactions} />}
       {financesTab === 'fixed' && (
         <div className="space-y-6">
           <div className="bg-[#0a0e17] border border-white/10 p-4 rounded-2xl shadow-lg">
@@ -1771,9 +1974,12 @@ function SettingsTab({ appPin, setAppPin, onExport, onClear, themeColor, onChang
         </button>
       </div>
       
-      <div className="pt-8 text-center text-[9px] font-mono text-gray-600">
+      <div className="pt-8 text-center text-[9px] font-mono text-gray-600 space-y-1">
         <p>FEITO PARA PRODUTIVIDADE ISOLADA</p>
-        <p className="mt-1">NENHUM DADO SAI DO SEU DISPOSITIVO</p>
+        <p>NENHUM DADO SAI DO SEU DISPOSITIVO</p>
+        <div className="pt-6">
+          <p className="text-[10px] text-gray-500/50 font-sans tracking-wide">© 2026 Juan Lavecchia — Desenvolvedor Web & Consultor TI</p>
+        </div>
       </div>
     </div>
   );

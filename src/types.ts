@@ -72,3 +72,20 @@ export interface RecurringItem {
   category: string;
   dayOfMonth?: number;
 }
+
+export interface Book {
+  id: string;
+  titulo: string;
+  autor: string;
+  totalPaginas: number;
+  paginaAtual: number;
+  status: 'lendo' | 'concluido' | 'pausado';
+  notas: string;
+}
+
+export interface ReadingLog {
+  id: string;
+  bookId: string;
+  data: string;
+  paginasLidas: number;
+}
